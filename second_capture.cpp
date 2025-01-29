@@ -7,25 +7,29 @@ Capture screen every second into an AVI.
 // DeviceID = 0x000000160d0fbfc8 L"MONITOR\\PHLC07C\\{3eef687d-2cb6-472a-a32f-06434731a2c6}\\0002"
 // DeviceID = 0x000000160d0fbfc8 L"MONITOR\\LEN65F4\\{3eef687d-2cb6-472a-a32f-06434731a2c6}\\0001"
 #if 0
-#define CAPTURE_ADAPTER L"AMD Radeon RX 6600"sv
+#define CAPTURE_NVIDIA 1
+#define CAPTURE_ADAPTER L"NVIDIA GeForce RTX 3060"sv
+// #define CAPTURE_ADAPTER L"AMD Radeon RX 6600"sv
 // #define CAPTURE_DISPLAY L"\\\\.\\DISPLAY1"sv
 #define CAPTURE_MONITOR L"MONITOR\\LEN65F4\\"sv
 #define CAPTURE_NOM 1
 #define CAPTURE_DENOM 2 // 1 / 2 fps
 #define CAPTURE_FOLDER L"C:\\screencap\\"sv
 #define CAPTURE_SUFFIX L"_c"sv
-#define CAPTURE_RECORD_MUL 16 // higher is lower q
-#define CAPTURE_PLAYBACK_MUL 10
+#define CAPTURE_RECORD_MUL 64 // higher is lower q (multiplies framerate as reported to encoder)
+#define CAPTURE_PLAYBACK_MUL 10 // (multiplies framerate as reported to AVI file)
 #define CAPTURE_HEVC 1
 #else
-#define CAPTURE_ADAPTER L"AMD Radeon RX 6600"sv
+#define CAPTURE_NVIDIA 1
+#define CAPTURE_ADAPTER L"NVIDIA GeForce RTX 3060"sv
+// #define CAPTURE_ADAPTER L"AMD Radeon RX 6600"sv
 // #define CAPTURE_DISPLAY L"\\\\.\\DISPLAY2"sv
 #define CAPTURE_MONITOR L"MONITOR\\PHLC07C\\"sv
 #define CAPTURE_NOM 1
 #define CAPTURE_DENOM 4 // 1 / 4 fps
 #define CAPTURE_FOLDER L"C:\\screencap\\"sv
 #define CAPTURE_SUFFIX L"_r"sv
-#define CAPTURE_RECORD_MUL 64 // higher is lower q
+#define CAPTURE_RECORD_MUL 256 // higher is lower q
 #define CAPTURE_PLAYBACK_MUL 10
 #define CAPTURE_HEVC 1
 #endif
@@ -73,6 +77,15 @@ using namespace std::string_view_literals;
 // VFW includes
 #include <vfw.h>
 
+#if CAPTURE_NVIDIA
+
+// NVIDIA NVENC header
+#include "nvEncodeAPI.h"
+
+typedef NVENCSTATUS (NVENCAPI *PFN_NvEncodeAPICreateInstance)(NV_ENCODE_API_FUNCTION_LIST *functionList);
+
+#else
+
 // AMF includes
 #include "AMF/core/Factory.h"
 
@@ -80,6 +93,8 @@ using namespace std::string_view_literals;
 #include "AMF/components/VideoEncoderHEVC.h"
 #else
 #include "AMF/components/VideoEncoderVCE.h"
+#endif
+
 #endif
 
 // STL includes
@@ -158,6 +173,7 @@ void printHResult(std::wstring_view wsvSection, HRESULT hr)
 	std::wcout.flags(oldFlags);
 }
 
+#if !CAPTURE_NVIDIA
 #define CHECK_AMF_RESULT_GOTO(wsvSection, amfRes, label) do { if (amfRes != AMF_OK) { printAmfResult((wsvSection), amfRes); goto label; } } while (false)
 #define CHECK_AMF_RESULT(wsvSection, amfRes) do { if (amfRes != AMF_OK) { printAmfResult((wsvSection), amfRes); return EXIT_FAILURE; } } while (false)
 void printAmfResult(std::wstring_view wsvSection, AMF_RESULT amfRes)
@@ -166,6 +182,48 @@ void printAmfResult(std::wstring_view wsvSection, AMF_RESULT amfRes)
 	std::wcout << L"ERROR ("sv << wsvSection << L") [AMF_RESULT 0x"sv << std::hex << amfRes << L"]\n"sv;
 	std::wcout.flags(oldFlags);
 }
+#endif
+
+// Add NVIDIA error checking
+#if CAPTURE_NVIDIA
+#define CHECK_NVENC_RESULT_GOTO(wsvSection, res, label) do { if (res != NV_ENC_SUCCESS) { printNvEncResult((wsvSection), res); goto label; } } while (false)
+#define CHECK_NVENC_RESULT(wsvSection, res) do { if (res != NV_ENC_SUCCESS) { printNvEncResult((wsvSection), res); return EXIT_FAILURE; } } while (false)
+void printNvEncResult(std::wstring_view wsvSection, NVENCSTATUS res)
+{
+	const char* errName = nullptr;
+	switch(res) {
+	case NV_ENC_SUCCESS: errName = "Success"; break;
+	case NV_ENC_ERR_NO_ENCODE_DEVICE: errName = "No encode capable devices detected"; break;
+	case NV_ENC_ERR_UNSUPPORTED_DEVICE: errName = "Device not supported"; break;
+	case NV_ENC_ERR_INVALID_ENCODERDEVICE: errName = "Invalid encoder device"; break;
+	case NV_ENC_ERR_INVALID_DEVICE: errName = "Invalid device"; break;
+	case NV_ENC_ERR_DEVICE_NOT_EXIST: errName = "Device no longer exists"; break;
+	case NV_ENC_ERR_INVALID_PTR: errName = "Invalid pointer"; break;
+	case NV_ENC_ERR_INVALID_EVENT: errName = "Invalid event"; break;
+	case NV_ENC_ERR_INVALID_PARAM: errName = "Invalid parameter"; break;
+	case NV_ENC_ERR_INVALID_CALL: errName = "Invalid API call sequence"; break;
+	case NV_ENC_ERR_OUT_OF_MEMORY: errName = "Out of memory"; break;
+	case NV_ENC_ERR_ENCODER_NOT_INITIALIZED: errName = "Encoder not initialized"; break;
+	case NV_ENC_ERR_UNSUPPORTED_PARAM: errName = "Unsupported parameter"; break;
+	case NV_ENC_ERR_LOCK_BUSY: errName = "Lock busy"; break;
+	case NV_ENC_ERR_NOT_ENOUGH_BUFFER: errName = "Not enough buffer"; break;
+	case NV_ENC_ERR_INVALID_VERSION: errName = "Invalid struct version"; break;
+	case NV_ENC_ERR_MAP_FAILED: errName = "Map failed"; break;
+	case NV_ENC_ERR_NEED_MORE_INPUT: errName = "Need more input"; break;
+	case NV_ENC_ERR_ENCODER_BUSY: errName = "Encoder busy"; break;
+	case NV_ENC_ERR_EVENT_NOT_REGISTERD: errName = "Event not registered"; break;
+	case NV_ENC_ERR_GENERIC: errName = "Generic error"; break;
+	case NV_ENC_ERR_INCOMPATIBLE_CLIENT_KEY: errName = "Incompatible client key"; break;
+	case NV_ENC_ERR_UNIMPLEMENTED: errName = "Feature not implemented"; break;
+	case NV_ENC_ERR_RESOURCE_REGISTER_FAILED: errName = "Resource registration failed"; break;
+	case NV_ENC_ERR_RESOURCE_NOT_REGISTERED: errName = "Resource not registered"; break;
+	case NV_ENC_ERR_RESOURCE_NOT_MAPPED: errName = "Resource not mapped"; break;
+	case NV_ENC_ERR_NEED_MORE_OUTPUT: errName = "Need more output buffers"; break;
+	default: errName = "Unknown error";
+	}
+	std::wcout << L"NVENC ERROR (" << wsvSection << L"): " << errName << L" (0x" << std::hex << res << L")\n";
+}
+#endif
 
 // Handle terminal exit
 // https://docs.microsoft.com/en-us/windows/console/registering-a-control-handler-function
@@ -191,7 +249,9 @@ int main()
 #endif
 {
 	HRESULT hr;
+#if !CAPTURE_NVIDIA
 	AMF_RESULT amfRes;
+#endif
 	std::unique_lock<std::mutex> waitClose(s_Closing);
 	s_ThreadId = GetCurrentThreadId();
 	static const auto applicationName = L"Second Capture"sv;
@@ -210,6 +270,7 @@ int main()
 	CHECK_LAST_ERROR(L"AVIFileInit"sv);
 	auto exitAviFile = gsl::finally([&]() -> void { AVIFileExit(); });
 
+#if !CAPTURE_NVIDIA
 	// Load up AMF library
 	HMODULE hAMFDll = LoadLibraryW(AMF_DLL_NAME);
 	if (hAMFDll)
@@ -231,6 +292,26 @@ int main()
 	oldFlags = std::wcout.flags();
 	std::wcout << L"AMF version: "sv << std::hex << amfVersion << L"\n"sv;
 	std::wcout.flags(oldFlags);
+#endif
+
+#if CAPTURE_NVIDIA
+	HMODULE hNvEncLib = LoadLibraryW(L"nvEncodeAPI64.dll");
+	if (hNvEncLib)
+		SetLastError(0);
+	CHECK_LAST_ERROR(L"LoadLibraryW"sv);
+	auto freeNvEncLib = gsl::finally([&]() -> void { FreeLibrary(hNvEncLib); });
+
+	// Get address of NvEncodeAPICreateInstance function
+	PFN_NvEncodeAPICreateInstance nvEncodeAPICreateInstance = 
+		(PFN_NvEncodeAPICreateInstance)GetProcAddress(hNvEncLib, "NvEncodeAPICreateInstance");
+	CHECK_LAST_ERROR(L"GetProcAddress"sv);
+
+	// NVIDIA NVENC initialization
+	NV_ENCODE_API_FUNCTION_LIST nvFuncs = { NV_ENCODE_API_FUNCTION_LIST_VER };
+	NVENCSTATUS nvRes = nvEncodeAPICreateInstance(&nvFuncs);
+	CHECK_NVENC_RESULT(L"NvEncodeAPICreateInstance", nvRes);
+	std::wcout << L"NVENC API version: "sv << nvFuncs.version << L"\n"sv;
+#endif
 
 	IDXGIFactory1 *factory;
 	factory = NULL;
@@ -241,12 +322,20 @@ int main()
 	do
 	{
 		{
+#if CAPTURE_NVIDIA
+			// NVIDIA-specific Resource Management Variables
+			NV_ENC_REGISTERED_PTR registeredResource = nullptr;
+			NV_ENC_INPUT_PTR mappedInputBuffer = nullptr;
+			NV_ENC_OUTPUT_PTR outputBitstream = nullptr;
+			NV_ENC_CREATE_BITSTREAM_BUFFER bitstreamBufferParams = { NV_ENC_CREATE_BITSTREAM_BUFFER_VER };
+#else
 			// Create AMF context
 			amf::AMFContext *amfContext;
 			amfRes = amfFactory->CreateContext(&amfContext);
 			CHECK_AMF_RESULT_GOTO(L"amfInit"sv, amfRes, Release);
 			auto releaseAmfContext = gsl::finally([&]() -> void { amfContext->Release(); });
 			std::wcout << L"AMF context ready.\n"sv;
+#endif
 
 			// Find friendly display name
 			std::wstring captureDisplay;
@@ -351,9 +440,11 @@ int main()
 			auto releaseDeviceContext = gsl::finally([&]() -> void { context->Release(); device->Release(); });
 			std::wcout << L"D3D11 interface ready.\n"sv;
 
+#if !CAPTURE_NVIDIA
 			// Bind AMF
 			amfRes = amfContext->InitDX11(device, amf::AMF_DX11_1);
 			CHECK_AMF_RESULT_GOTO(L"InitDX11"sv, amfRes, Release);
+#endif
 
 			// Create output duplication interface
 			IDXGIOutput1 *output1;
@@ -379,6 +470,7 @@ int main()
 			LONG w = outputDesc.DesktopCoordinates.right - outputDesc.DesktopCoordinates.left;
 			LONG h = outputDesc.DesktopCoordinates.bottom - outputDesc.DesktopCoordinates.top;
 
+#if !CAPTURE_NVIDIA
 			// AMFVideoEncoder_HEVC or AMFVideoEncoderVCE_AVC
 			amf::AMFComponent *amfEncoder;
 #if CAPTURE_HEVC
@@ -421,6 +513,62 @@ int main()
 
 			amfRes = amfEncoder->Init(amf::AMF_SURFACE_BGRA, w, h);
 			CHECK_AMF_RESULT_GOTO(L"Init"sv, amfRes, Release);
+#endif
+
+#if CAPTURE_NVIDIA
+			// Create NVENC encoder
+			void* nvEncoder = nullptr;
+			NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS openParams = { NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS_VER };
+			openParams.deviceType = NV_ENC_DEVICE_TYPE_DIRECTX;
+			openParams.device = device; // Use existing D3D11 device
+			openParams.apiVersion = NVENCAPI_VERSION;
+			nvRes = nvFuncs.nvEncOpenEncodeSessionEx(&openParams, &nvEncoder);
+			CHECK_NVENC_RESULT_GOTO(L"nvEncOpenEncodeSessionEx", nvRes, Release);
+			auto releaseNvEncoder = gsl::finally([&]() -> void { nvFuncs.nvEncDestroyEncoder(nvEncoder); });
+
+			// Retrieve preset configuration for HEVC
+			NV_ENC_PRESET_CONFIG presetConfig = { 0 };
+			presetConfig.version = NV_ENC_PRESET_CONFIG_VER;
+			presetConfig.presetCfg.version = NV_ENC_CONFIG_VER;
+			nvRes = nvFuncs.nvEncGetEncodePresetConfig(nvEncoder, NV_ENC_CODEC_HEVC_GUID, NV_ENC_PRESET_P4_GUID, &presetConfig);
+			CHECK_NVENC_RESULT_GOTO(L"nvEncGetEncodePresetConfig", nvRes, Release);
+
+			// Configure NVENC
+			NV_ENC_INITIALIZE_PARAMS initParams = { 0 };
+			initParams.version = NV_ENC_INITIALIZE_PARAMS_VER;
+			NV_ENC_CONFIG &encConfig = presetConfig.presetCfg;
+			initParams.encodeConfig = &presetConfig.presetCfg;
+
+			// Set codec-specific parameters
+			encConfig.profileGUID = NV_ENC_HEVC_PROFILE_MAIN_GUID;
+			// encConfig.encodeCodecConfig.hevcConfig.chromaFormatIDC = 1; // 4:2:0
+			
+			// Override preset settings if needed
+			encConfig.rcParams.rateControlMode = NV_ENC_PARAMS_RC_VBR;
+			// encConfig.rcParams.averageBitRate = 1000000;
+			// encConfig.rcParams.maxBitRate = 2000000;
+			// encConfig.rcParams.vbvBufferSize = encConfig.rcParams.maxBitRate;
+			// encConfig.rcParams.vbvInitialDelay = encConfig.rcParams.vbvBufferSize;
+			
+			// Initialize encoder with updated parameters
+			initParams.encodeGUID = NV_ENC_CODEC_HEVC_GUID;
+			initParams.encodeWidth = w;
+			initParams.encodeHeight = h;
+			initParams.frameRateNum = CAPTURE_NOM * CAPTURE_RECORD_MUL;
+			initParams.frameRateDen = CAPTURE_DENOM;
+			initParams.enablePTD = 1;
+
+			nvRes = nvFuncs.nvEncInitializeEncoder(nvEncoder, &initParams);
+			CHECK_NVENC_RESULT_GOTO(L"nvEncInitializeEncoder", nvRes, Release);
+
+			// Create bitstream buffer
+			bitstreamBufferParams.size = 4 * 1024 * 1024; // Adjust based on resolution
+			bitstreamBufferParams.memoryHeap = NV_ENC_MEMORY_HEAP_SYSMEM_CACHED;
+			nvRes = nvFuncs.nvEncCreateBitstreamBuffer(nvEncoder, &bitstreamBufferParams);
+			CHECK_NVENC_RESULT_GOTO(L"nvEncCreateBitstreamBuffer", nvRes, Release);
+			outputBitstream = bitstreamBufferParams.bitstreamBuffer;
+			auto releaseBitstreamBuffer = gsl::finally([&]() -> void { nvFuncs.nvEncDestroyBitstreamBuffer(nvEncoder, outputBitstream); });
+#endif
 
 			// Target texture
 			/*
@@ -512,7 +660,7 @@ int main()
 					streamInfo.dwScale = CAPTURE_DENOM;
 					// streamInfo.dwSuggestedBufferSize = 256 * 1024; // (w * h * 4);
 					SetRect(&streamInfo.rcFrame, 0, 0, w, h);
-					wcscpy(streamInfo.szName, L"Second Capture");
+					wcscpy_s(streamInfo.szName, L"Second Capture");
 
 					hr = AVIFileCreateStreamW(aviFile, &aviStream, &streamInfo);
 					CHECK_HRESULT(L"AVIFileOpenW"sv, hr);
@@ -564,6 +712,7 @@ int main()
 				return EXIT_SUCCESS;
 			};
 
+#if !CAPTURE_NVIDIA
 			auto fetchEncodedFrames = [&](bool drain) -> int {
 				// Fetch encoded frames
 				if (drain)
@@ -632,6 +781,7 @@ int main()
 				}
 				return EXIT_SUCCESS;
 			};
+#endif
 
 			// Loop
 			DXGI_OUTDUPL_FRAME_INFO frameInfo = { 0 };
@@ -685,6 +835,55 @@ int main()
 
 									std::wcout << L"Captured!\n";
 
+#if CAPTURE_NVIDIA
+									// Register the DX11 texture
+									NV_ENC_REGISTER_RESOURCE registerResParams = { NV_ENC_REGISTER_RESOURCE_VER };
+									registerResParams.resourceType = NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX;
+									registerResParams.width = w;
+									registerResParams.height = h;
+									registerResParams.bufferFormat = NV_ENC_BUFFER_FORMAT_ARGB;
+									registerResParams.resourceToRegister = frameBuffer;
+									nvRes = nvFuncs.nvEncRegisterResource(nvEncoder, &registerResParams);
+									CHECK_NVENC_RESULT_GOTO(L"nvEncRegisterResource", nvRes, DrainRelease);
+									registeredResource = registerResParams.registeredResource;
+									auto releaseRegisteredResource = gsl::finally([&]() -> void { nvFuncs.nvEncUnregisterResource(nvEncoder, registeredResource); });
+
+									// Map the resource
+									NV_ENC_MAP_INPUT_RESOURCE mapInputResParams = { NV_ENC_MAP_INPUT_RESOURCE_VER };
+									mapInputResParams.registeredResource = registeredResource;
+									nvRes = nvFuncs.nvEncMapInputResource(nvEncoder, &mapInputResParams);
+									CHECK_NVENC_RESULT_GOTO(L"nvEncMapInputResource", nvRes, DrainRelease);
+									mappedInputBuffer = mapInputResParams.mappedResource;
+									auto releaseMappedInputBuffer = gsl::finally([&]() -> void { nvFuncs.nvEncUnmapInputResource(nvEncoder, mappedInputBuffer); });
+
+									// Submit frame to NVENC
+									NV_ENC_PIC_PARAMS picParams = { NV_ENC_PIC_PARAMS_VER };
+									picParams.inputWidth = w;
+									picParams.inputHeight = h;
+									picParams.inputPitch = picParams.inputWidth;
+									picParams.inputBuffer = mappedInputBuffer; // Map DX11 resource
+									picParams.bufferFmt = NV_ENC_BUFFER_FORMAT_ARGB;
+									picParams.outputBitstream = outputBitstream;
+									picParams.pictureStruct = NV_ENC_PIC_STRUCT_FRAME;
+
+									nvRes = nvFuncs.nvEncEncodePicture(nvEncoder, &picParams);
+									CHECK_NVENC_RESULT_GOTO(L"nvEncEncodePicture", nvRes, DrainRelease);
+
+									// Lock and retrieve encoded data
+									NV_ENC_LOCK_BITSTREAM lockBitstreamParams = { NV_ENC_LOCK_BITSTREAM_VER };
+									lockBitstreamParams.outputBitstream = outputBitstream;
+
+									nvRes = nvFuncs.nvEncLockBitstream(nvEncoder, &lockBitstreamParams);
+									CHECK_NVENC_RESULT(L"nvEncLockBitstream", nvRes);
+									auto releaseLockBitstream = gsl::finally([&]() -> void { nvFuncs.nvEncUnlockBitstream(nvEncoder, outputBitstream); });
+
+									void *buffer = lockBitstreamParams.bitstreamBufferPtr;
+									size_t sz = lockBitstreamParams.bitstreamSizeInBytes;
+									bool keyframe = (lockBitstreamParams.pictureType == NV_ENC_PIC_TYPE_IDR);
+
+									pushAvi(buffer, sz, keyframe);
+									std::wcout << L"Encoded"sv << (keyframe ? L" keyframe"sv : L""sv) << L" ("sv << sz << L" bytes)!\n"sv;
+#else
 									amf::AMFSurface *amfSurface;
 									amfRes = amfContext->CreateSurfaceFromDX11Native(frameBuffer, &amfSurface, NULL);
 									CHECK_AMF_RESULT_GOTO(L"CreateSurfaceFromDX11Native"sv, amfRes, DrainRelease);
@@ -693,10 +892,15 @@ int main()
 									amfRes = amfEncoder->SubmitInput(amfSurface);
 									CHECK_AMF_RESULT_GOTO(L"SubmitInput"sv, amfRes, Break);
 									// AMF_NOT_INITIALIZED 0xd, AMF_EOF 0x17
+#endif
 								}
+#if !CAPTURE_NVIDIA
 								fetchEncodedFrames(false);
+#endif
 							}
+#if !CAPTURE_NVIDIA
 						Break:
+#endif
 							break;
 						case WM_APP + 1:
 							goto DrainRelease;
@@ -710,8 +914,12 @@ int main()
 			}
 
 		DrainRelease:
+#if !CAPTURE_NVIDIA
 			std::wcout << L"Drain...\n"sv;
 			fetchEncodedFrames(true);
+#else
+			std::wcout << L"Flush...\n"sv;
+#endif
 			flushAvi();
 		}
 	Release:
