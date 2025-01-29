@@ -876,7 +876,7 @@ int main()
 									lockBitstreamParams.outputBitstream = outputBitstream;
 
 									nvRes = nvFuncs.nvEncLockBitstream(nvEncoder, &lockBitstreamParams);
-									CHECK_NVENC_RESULT(L"nvEncLockBitstream", nvRes);
+									CHECK_NVENC_RESULT_GOTO(L"nvEncLockBitstream", nvRes, DrainRelease);
 									auto releaseLockBitstream = gsl::finally([&]() -> void { nvFuncs.nvEncUnlockBitstream(nvEncoder, outputBitstream); });
 
 									void *buffer = lockBitstreamParams.bitstreamBufferPtr;
