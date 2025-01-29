@@ -122,6 +122,8 @@ typedef NVENCSTATUS (NVENCAPI *PFN_NvEncodeAPICreateInstance)(NV_ENCODE_API_FUNC
 // https://stackoverflow.com/questions/46601724/h264-inside-avi-mp4-and-raw-h264-streams-different-format-of-nal-units-or-f/46606524
 // http://blog.mediacoderhq.com/h264-profiles-and-levels/
 // https://en.wikipedia.org/wiki/High_Efficiency_Video_Coding_tiers_and_levels
+// https://github.com/MediaEnhanced/LosslessScreenRecord/blob/main/src/losslessScreenRecord.c
+// https://github.com/RMichelsen/Blitstream/blob/master/Blitstream_Encoder/Source/Encoder.cpp
 
 // https://docs.microsoft.com/en-us/windows/win32/debug/retrieving-the-last-error-code
 #define CHECK_LAST_ERROR_GOTO(wsvSection, label) do { if (DWORD dwErr = GetLastError()) { printError((wsvSection), dwErr); goto label; } } while (false)
